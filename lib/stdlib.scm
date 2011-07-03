@@ -42,11 +42,9 @@
 
 (define (?) (error "not implemented"))
 
-
- ; rafael é um cara legal
-
-  (begin
+(begin
     (display "MyLisp Interpreter")
     (newline)
     (newline)
-    (display "Type (?) for a list of commands in standard library or (quit) to quit"))
+    (display "Type (?) for a list of commands in standard library or (quit)
+to quit"))
