@@ -50,27 +50,27 @@ loadSourceFile :: String -> ExecutionIO [Expression]
 loadSourceFile filename =
     liftIO (catch (readFile filename) (\_ -> return $ "(error \"file '" ++ filename ++ "' not found\")")) >>= liftExecution . lispManyParser
 
+getSymbol :: Environment -> String -> ExecutionIO Expression
+getSymbol envRef sym = do
+    env <- liftIO (readIORef envRef)
+    case (lookup sym env) of
+        Nothing -> throwError $ UnboundSymbolError "getting symbol not bounded" sym
+        Just symRef -> liftIO (readIORef symRef)
+
+setSymbol :: Environment -> String -> Expression -> ExecutionIO Expression
+setSymbol envRef sym exp = do
+    env <- liftIO (readIORef envRef)
+    case (lookup sym env) of
+        Nothing -> throwError $ UnboundSymbolError "setting symbol not bounded" sym
+        Just symRef -> liftIO (writeIORef symRef exp)
+    return exp
+
 isSymbolBound :: Environment -> String -> IO Bool
 isSymbolBound envRef sym = do
     env <- readIORef envRef
     case (lookup sym env) of
         Nothing -> return False
         Just _ -> return True
-
-getSymbol :: Environment -> String -> ExecutionIO Expression
-getSymbol envRef sym = do
-    symbolBounded <- liftIO (isSymbolBound envRef sym)
-    if symbolBounded
-        then Just symRef -> liftIO (readIORef symRef)
-        else Nothing -> throwError $ UnboundSymbolError "getting symbol not bounded" sym
-
-setSymbol :: Environment -> String -> Expression -> ExecutionIO Expression
-setSymbol envRef sym exp = do
-    symbolBounded <- liftIO (isSymbolBound envRef sym)
-    if symbolBounded
-        then Just symRef -> liftIO (writeIORef symRef exp)
-        else Nothing -> throwError $ UnboundSymbolError "setting symbol not bounded" sym
-    return exp
 
 defineSymbol :: Environment -> String -> Expression -> ExecutionIO Expression
 defineSymbol envRef sym exp = do
@@ -142,8 +142,7 @@ builtinFunctions = [("+", builtinIntBinOp (+)),
                     ("eqv?", builtinEqv),
                     ("car", builtinCar),
                     ("cdr", builtinCdr),
-                    ("cons", builtinCons),
-                    ("append", builtinAppend)]
+                    ("cons", builtinCons)]
 
 builtinIntBinOp :: (Integer -> Integer -> Integer) -> [Expression] ->
     Execution Expression
@@ -239,11 +238,6 @@ builtinCons [x, List xs] = return $ List (x : xs)
 builtinCons [x, DottedList xs last] = return $ DottedList (x : xs) last
 builtinCons [x1, x2] = return $ DottedList [x1] x2
 builtinCons args = throwError $ NumArgsError 2 args
-
-builtinAppend :: [Expression] -> Execution Expression
-builtinAppend [x, List[]] = return $ List [x]
-builtinAppend [x, List xs] = return $ List [x] ++ xs
-builtinAppend [x1, x2] = return $ List x1 ++ x2
 
 builtinIOFunctions :: [(String, [Expression] -> ExecutionIO Expression)]
 builtinIOFunctions = [("quit", builtinQuit),

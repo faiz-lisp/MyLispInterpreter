@@ -11,7 +11,7 @@ loop action = do
 
 stdLib = do
     envRef <- startEnvironment
-    interpreter envRef "(load \"stdlib.lsp\")" >>= putStrLn
+    interpreter envRef "(load \"lib/stdlib.scm\")" >>= putStrLn
     return envRef
 
 main = stdLib >>= loop . (\envRef input -> interpreter envRef input)
