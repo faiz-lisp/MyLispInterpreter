@@ -32,7 +32,6 @@ quoteParser = do
     e <- expressionParser
     return $ List [Symbol "quote", e]
 
-spaces0 = skipMany space
 spaces1 = skipMany1 space
 
 listParser = do { l <- sepEndBy expressionParser spaces1; return $ List l }
@@ -42,19 +41,19 @@ dottedListParser = do
     t <- char '.' >> spaces1 >> expressionParser
     return $ DottedList h t
 
-expressionParser = spaces0 >>
+expressionParser = spaces >>
     ((try integerParser) <|>
-     identifierParser <|>
-     boolParser <|>
-     stringParser <|>
-     quoteParser <|>
-     do {
+    identifierParser <|>
+    boolParser <|>
+    stringParser <|>
+    quoteParser <|>
+    do {
         char '(';
         l <- (try dottedListParser) <|> listParser;
-        spaces0;
+        spaces;
         char ')';
         return l;
-     })
+    })
 
 genericParser :: Parser a -> String -> Execution a
 genericParser parser input = case parse parser "" input of
@@ -63,4 +62,7 @@ genericParser parser input = case parse parser "" input of
 
 lispParser = genericParser expressionParser
 
-lispManyParser = genericParser (endBy expressionParser spaces0)
+commentsParser = do { char ';'; manyTill anyChar (try newline); }
+
+lispManyParser = genericParser (sepEndBy expressionParser
+    (spaces >> skipMany commentsParser))

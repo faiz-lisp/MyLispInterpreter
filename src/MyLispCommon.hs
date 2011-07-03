@@ -14,7 +14,8 @@ data Expression = Symbol String
                 | DottedList [Expression] Expression
                 | BuiltinFunction ([Expression] -> Execution Expression)
                 | BuiltinIOFunction ([Expression] -> ExecutionIO Expression)
-                | UserDefinedFunction [String] (Maybe String) [Expression] Environment
+                | UserDefinedFunction [String] (Maybe String) [Expression]
+                      Environment
 
 instance Show Expression where
     show (Symbol i) = i
@@ -43,7 +44,8 @@ instance Show ExecutionError where
     show (ParserError e) = "parser error at " ++ show e
     show (NumArgsError e f) = "incorrect number of arguments in: " ++
         unwordsShow f ++ "; expected " ++ show e
-    show (TypeError e f) = "invalid type: expected " ++ e ++ "; given " ++ show f
+    show (TypeError e f) = "invalid type: expected " ++ e ++ "; given " ++
+        show f
     show (UnboundSymbolError m v) = m ++ ": " ++ v
     show (BadFormError m f) = m ++ ": " ++ show f
     show (NotFunctionError m f) = m ++ ": " ++ show f
@@ -68,6 +70,7 @@ liftExecution (Left e) = throwError e
 liftExecution (Right v) = return v
 
 runExecutionIO :: ExecutionIO String -> IO String
-runExecutionIO action = runErrorT (catchErrorMsg action) >>= return . unpackExecution
+runExecutionIO action = runErrorT (catchErrorMsg action) >>=
+    return . unpackExecution
 
 type Environment = IORef [(String, IORef Expression)]

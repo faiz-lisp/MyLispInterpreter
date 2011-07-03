@@ -37,9 +37,15 @@
 (define (filter pred lst)
     (foldr (lambda (x y) (if (pred x) (cons x y) y)) '() lst))
 
+(define (filter pred lst)
+    (foldr (lambda (x y) (if (pred x) (cons x y) y)) '() lst))
+
 (define (?) (error "not implemented"))
 
-(begin
+
+ ; rafael é um cara legal
+
+  (begin
     (display "MyLisp Interpreter")
     (newline)
     (newline)

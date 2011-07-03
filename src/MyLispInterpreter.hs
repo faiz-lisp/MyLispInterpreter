@@ -1,8 +1,8 @@
 module MyLispInterpreter where
 
 import Control.Monad
-import Control.Monad.Trans
 import Control.Monad.Error
+import Control.Monad.Trans
 import Data.IORef
 import System.IO
 import System.Exit
@@ -32,8 +32,10 @@ eval envRef (List [Symbol "define", Symbol sym, exp]) =
     eval envRef exp >>= defineSymbol envRef sym
 eval envRef (List (Symbol "define" : List (Symbol sym : params) : body)) =
     createNormalFunction envRef params body >>= defineSymbol envRef sym
-eval envRef (List (Symbol "define" : DottedList (Symbol sym : params) varArg : body)) =
-    createVarArgFunction varArg envRef params body >>= defineSymbol envRef sym
+eval envRef (List (Symbol "define" :
+    DottedList (Symbol sym : params) varArg : body)) =
+        createVarArgFunction varArg envRef params body
+        >>= defineSymbol envRef sym
 eval envRef (List (Symbol "lambda" : List params : body)) =
     createNormalFunction envRef params body
 eval envRef (List (Symbol "lambda" : DottedList params varArg : body)) =
@@ -48,20 +50,24 @@ eval _ badForm = throwError $ BadFormError "unrecognized expression" badForm
 
 loadSourceFile :: String -> ExecutionIO [Expression]
 loadSourceFile filename =
-    liftIO (catch (readFile filename) (\_ -> return $ "(error \"file '" ++ filename ++ "' not found\")")) >>= liftExecution . lispManyParser
+    liftIO (catch (readFile filename)
+    (\_ -> return $ "(error \"file '" ++ filename ++ "' inaccessible\")")) >>=
+    liftExecution . lispManyParser
 
 getSymbol :: Environment -> String -> ExecutionIO Expression
 getSymbol envRef sym = do
     env <- liftIO (readIORef envRef)
     case (lookup sym env) of
-        Nothing -> throwError $ UnboundSymbolError "getting symbol not bounded" sym
+        Nothing ->
+            throwError $ UnboundSymbolError "getting symbol not bounded" sym
         Just symRef -> liftIO (readIORef symRef)
 
 setSymbol :: Environment -> String -> Expression -> ExecutionIO Expression
 setSymbol envRef sym exp = do
     env <- liftIO (readIORef envRef)
     case (lookup sym env) of
-        Nothing -> throwError $ UnboundSymbolError "setting symbol not bounded" sym
+        Nothing ->
+            throwError $ UnboundSymbolError "setting symbol not bounded" sym
         Just symRef -> liftIO (writeIORef symRef exp)
     return exp
 
@@ -87,9 +93,11 @@ bindSymbol :: (String, Expression) -> IO (String, IORef Expression)
 bindSymbol (sym, exp) = do { expRef <- newIORef exp; return (sym, expRef) }
 
 bindSymbols :: Environment -> [(String, Expression)] -> IO Environment
-bindSymbols envRef symExpList = readIORef envRef >>= (\env -> liftM (++ env) (mapM bindSymbol symExpList)) >>= newIORef
+bindSymbols envRef symExpList = readIORef envRef >>=
+    (\env -> liftM (++ env) (mapM bindSymbol symExpList)) >>= newIORef
 
-createFunction varArg envRef params body = return $ UserDefinedFunction (map show params) varArg body envRef
+createFunction varArg envRef params body =
+    return $ UserDefinedFunction (map show params) varArg body envRef
 
 createNormalFunction = createFunction Nothing
 
@@ -101,13 +109,15 @@ apply (BuiltinIOFunction fun) args = fun args
 apply (UserDefinedFunction params varArg body envRef) args =
     if numParams /= numArgs && varArg == Nothing
         then throwError $ NumArgsError numParams args
-        else liftIO (bindSymbols envRef (zip params args)) >>= bindVarArg varArg >>= evalFunctionBody
+        else liftIO (bindSymbols envRef (zip params args)) >>=
+            bindVarArg varArg >>= evalFunctionBody
     where
         numParams = toInteger (length params)
         numArgs = toInteger (length args)
         evalFunctionBody envRef = liftM last (mapM (eval envRef) body)
         bindVarArg varArg env = case varArg of
-            Just arg -> liftIO (bindSymbols env [(arg, List $ drop (length params) args)])
+            Just arg -> liftIO (bindSymbols env
+                [(arg, List $ drop (length params) args)])
             Nothing -> return env
 apply badForm _ = throwError $ NotFunctionError "not a function" (show badForm)
 
@@ -151,7 +161,8 @@ builtinIntBinOp op args = do
     unpackedArgs <- mapM unpackInt args
     return $ Integer (foldl1 op unpackedArgs)
 
-boolBinOp :: (Expression -> Execution a) -> (a -> a -> Bool) -> [Expression] -> Execution Expression
+boolBinOp :: (Expression -> Execution a) -> (a -> a -> Bool) -> [Expression] ->
+    Execution Expression
 boolBinOp unpacker op [arg1, arg2] = do
     left <- unpacker arg1
     right <- unpacker arg2
@@ -211,11 +222,13 @@ builtinEqv [(Symbol arg1), (Symbol arg2)] = return $ Bool (arg1 == arg2)
 builtinEqv [(Bool arg1), (Bool arg2)] = return $ Bool (arg1 == arg2)
 builtinEqv [(Integer arg1), (Integer arg2)] = return $ Bool (arg1 == arg2)
 builtinEqv [(String arg1), (String arg2)] = return $ Bool (arg1 == arg2)
-builtinEqv [(List arg1), (List arg2)] = return $ Bool (length arg1 == length arg2 && (and (map eqvPair (zip arg1 arg2))))
+builtinEqv [(List arg1), (List arg2)] = return $
+    Bool (length arg1 == length arg2 && (and (map eqvPair (zip arg1 arg2))))
     where eqvPair (x, y) = case builtinEqv [x, y] of
             Left _ -> False
             Right (Bool val) -> val
-builtinEqv [(DottedList xs x), (DottedList ys y)] = builtinEqv [List $ xs ++ [x], List $ ys ++ [y]]
+builtinEqv [(DottedList xs x), (DottedList ys y)] =
+    builtinEqv [List $ xs ++ [x], List $ ys ++ [y]]
 builtinEqv [_, _] = return $ Bool False
 builtinEqv args = throwError $ NumArgsError 2 args
 
@@ -278,8 +291,11 @@ startEnvironment :: IO Environment
 startEnvironment = do
     emptyEnv <- newIORef []
     let builtinFunction cons (sym, fun) = (sym, cons fun)
-    builtinEnv <- bindSymbols emptyEnv (map (builtinFunction BuiltinFunction) builtinFunctions)
-    bindSymbols builtinEnv (map (builtinFunction BuiltinIOFunction) builtinIOFunctions)
+    builtinEnv <- bindSymbols emptyEnv (map (builtinFunction BuiltinFunction)
+        builtinFunctions)
+    bindSymbols builtinEnv (map (builtinFunction BuiltinIOFunction)
+        builtinIOFunctions)
 
 interpreter :: Environment -> String -> IO String
-interpreter envRef input = runExecutionIO (liftM show (liftExecution (lispParser input) >>= eval envRef))
+interpreter envRef input = runExecutionIO (liftM show (liftExecution
+    (lispParser input) >>= eval envRef))
