@@ -15,9 +15,9 @@ comments. I intend to solve this soon.
 If you want to know about the dialect covered by the interpreter, look into
 the lib/ directory. There's some functions implemented there.
 
-Hope it be nice to somone else =).
+Hope it be nice to someone else =).
 
 Rafael Menezes Barreto (rafaelbarreto87@gmail.com)
 
-http://rafaelbarreto.wordpress.com/
+http://rafaelbarreto.com/
 
