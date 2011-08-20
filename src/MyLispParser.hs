@@ -1,68 +1,92 @@
-module MyLispParser where
+module MyLispParser (myLispParser) where
 
 import Control.Monad.Error
+import Data.Char
 import Text.ParserCombinators.Parsec
+import qualified Text.ParserCombinators.Parsec.Token as T
 
 import MyLispCommon
 
-integerParser = do
-    s <- option "" (string "-")
-    i <- many1 digit
-    return $ Integer (read (s ++ i))
+lexer = T.makeTokenParser $ T.LanguageDef {
+    T.commentStart = "#|",
+    T.commentEnd = "|#",
+    T.nestedComments = True,
+    T.commentLine = ";",
+    T.identStart = letter <|> identStartSpecialSym,
+    T.identLetter = alphaNum <|> identLetterSpecialSym,
+    T.opStart = unexpected "internal error: should not parse operators",
+    T.opLetter = unexpected "internal error: should not parse operators",
+    T.reservedNames = [],
+    T.reservedOpNames = [],
+    T.caseSensitive = False
+} where
+    identStartSpecialSym = oneOf "!$%&*/:<=>?^_~"
+    identLetterSpecialSym = identStartSpecialSym <|> oneOf "+-.@"
 
-identifierSymbol = oneOf "!$%&|*+-/:<=>?@^_~"
+whiteSpace = T.whiteSpace lexer
+lexeme = T.lexeme lexer
+symbol = T.symbol lexer
+identifier = T.identifier lexer
+stringLiteral = T.stringLiteral lexer
+natural = T.natural lexer
+float = T.float lexer
+parens = T.parens lexer
 
-identifierParser = do
-    s <- letter <|> identifierSymbol
-    l <- many $ alphaNum <|> identifierSymbol
-    return $ Symbol (s:l)
+numberParser :: Parser Expression
+numberParser = (try realParser) <|> integerParser where
+    signParser :: Num a => Parser (a -> a)
+    signParser =
+        (char '-' >> return negate) <|>
+        (char '+' >> return id) <|>
+        return id
+    realParser = signParser >>= (\s -> float >>= return . Real . s)
+    integerParser = signParser >>= (\s -> natural >>= return . Integer . s)
 
-boolParser = char '#' >> (falseParser <|> trueParser) where
-    falseParser = do { char 'f'; return $ Bool False }
-    trueParser = do { char 't'; return $ Bool True }
+symbolParser :: Parser Expression
+symbolParser = (identifier <|> identSpecial) >>= return . Symbol . map toLower
+    where identSpecial = symbol "+" <|> symbol "-" <|> symbol "..."
 
-stringParser = do
-    char '"'
-    s <- many $ noneOf "\""
-    char '"'
-    return $ String s
+boolParser :: Parser Expression
+boolParser = lexeme $ char '#' >> (falseParser <|> trueParser) where
+    falseParser = do { oneOf "fF"; return $ Bool False }
+    trueParser = do { oneOf "tT"; return $ Bool True }
 
-quoteParser = do
-    char '\''
-    e <- expressionParser
-    return $ List [Symbol "quote", e]
+charParser :: Parser Expression
+charParser = lexeme $ string "#\\" >> anyChar >>= return . Char
 
-spaces1 = skipMany1 space
+stringParser :: Parser Expression
+stringParser = stringLiteral >>= return . String
 
-listParser = do { l <- sepEndBy expressionParser spaces1; return $ List l }
+quoteParser :: Parser Expression
+quoteParser =
+    symbol "'" >> expressionParser >>= (\e -> return $ List [Symbol "quote", e])
 
-dottedListParser = do
-    h <- endBy expressionParser spaces1
-    t <- char '.' >> spaces1 >> expressionParser
-    return $ DottedList h t
+listParser :: Parser Expression
+listParser = do
+    h <- many expressionParser
+    if null h
+        then return $ List []
+        else (symbol "." >> expressionParser >>= return . DottedList h) <|>
+             (return $ List h)
 
-expressionParser = spaces >>
-    ((try integerParser) <|>
-    identifierParser <|>
-    boolParser <|>
-    stringParser <|>
-    quoteParser <|>
-    do {
-        char '(';
-        l <- (try dottedListParser) <|> listParser;
-        spaces;
-        char ')';
-        return l;
-    })
+expressionParser :: Parser Expression
+expressionParser =
+    ((parens listParser) <?> "list/dotted list") <|>
+    ((try numberParser) <?> "number") <|>
+    ((try symbolParser) <?> "symbol") <|>
+    (stringParser <?> "string") <|>
+    ((try boolParser) <?> "bool") <|>
+    (charParser <?> "char") <|>
+    (quoteParser <?> "'")
 
-genericParser :: Parser a -> String -> Execution a
-genericParser parser input = case parse parser "" input of
-    Left e -> throwError $ ParserError e
-    Right v -> return v
+multiExpressionParser :: Parser [Expression]
+multiExpressionParser = do
+    whiteSpace
+    e <- many expressionParser
+    eof
+    return e
 
-lispParser = genericParser expressionParser
-
-commentsParser = do { char ';'; manyTill anyChar (try newline); }
-
-lispManyParser = genericParser (sepEndBy expressionParser
-    (spaces >> skipMany commentsParser))
+myLispParser :: FilePath -> String -> Execution [Expression]
+myLispParser inSrc input = case parse multiExpressionParser inSrc input of
+    Left e -> throwError $ ParserError $ show e
+    Right v -> if null v then return [Void] else return v
