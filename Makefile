@@ -1,4 +1,4 @@
-HC_FLAGS = -XGeneralizedNewtypeDeriving -O -fexcess-precision
+HC_FLAGS = -O -fexcess-precision
 HC_PROF_FLAGS = -rtsopts -prof -auto-all
 OBJ_DIR = obj/
 SRC_DIR = src/
