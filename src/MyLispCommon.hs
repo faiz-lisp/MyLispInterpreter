@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module MyLispCommon where
 
 import Control.Monad.Error

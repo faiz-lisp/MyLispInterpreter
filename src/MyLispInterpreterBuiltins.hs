@@ -1,6 +1,8 @@
 module MyLispInterpreterBuiltins (builtinFunctions) where
 
 import Control.Monad.Error
+import System.Exit
+import System.IO
 
 import MyLispInterpreterCore
 import MyLispCommon
@@ -229,6 +231,14 @@ defSourceCode [BuiltinFunction _] = throwError $ GenericError "non-available"
 defSourceCode [arg] = throwError $ TypeError "lambda object" arg
 defSourceCode args = throwError $ NumArgsError "def-source-code" 1 args
 
+exitSuccess' :: [Expression] -> Execution Expression
+exitSuccess' [] = liftE $ exitSuccess >> return Void
+exitSuccess' args = throwError $ NumArgsError "exit-success" 0 args
+
+exitFailure' :: [Expression] -> Execution Expression
+exitFailure' [] = liftE $ exitFailure >> return Void
+exitFailure' args = throwError $ NumArgsError "exit-failure" 0 args
+
 {--
   =======================
   Builtin functions table
@@ -260,4 +270,6 @@ builtinFunctions = [("+", plusOp),
                     ("cdr", cdr),
                     ("equal?", equal),
                     ("def-source-code", defSourceCode),
-                    ("apply", apply')]
+                    ("apply", apply'),
+                    ("exit", exitSuccess'),
+                    ("exit-failure", exitFailure')]

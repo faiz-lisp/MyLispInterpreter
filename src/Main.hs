@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Main where
 
 import Control.Exception
@@ -6,6 +8,7 @@ import Data.Version
 import Prelude hiding (catch)
 import System
 import System.Console.GetOpt
+import System.Exit
 import System.Info
 import System.IO
 
@@ -16,13 +19,13 @@ data Options = Options {
     optShowHelp :: Bool,
     optRepl :: Bool,
     optStdLib :: String
-} deriving Show
+}
 
 defaultOptions = Options {
     optVerbose = False,
     optShowHelp = False,
     optRepl = False,
-    optStdLib = "stdlib.scm"
+    optStdLib = ""
 }
 
 optionsDescr :: [OptDescr (Options -> Options)]
@@ -63,38 +66,61 @@ usageMsg = do
 processCmdLine :: IO (Options, [String])
 processCmdLine = do
     args <- getArgs
-    case getOpt RequireOrder optionsDescr args of
-        (options, nonOptions, []) -> return $
+    case getOpt Permute optionsDescr args of
+        (options, nonOptions, []) -> return
             (foldl (flip id) defaultOptions options, nonOptions)
         (_, _, errors) ->
             usageMsg >>= (\m -> return $ (concat errors) ++ '\n':m) >>=
-            hPutStr stderr >> exitWith (ExitFailure 1)
+            hPutStr stderr >> exitFailure
 
-replWelcomeMsg = versionHeader ++
-    "\n\nA really tiny Scheme interpreter." ++
-    "\n\nType (def-list) to inspect the environment."
-
-repl evaluator = putStrLn replWelcomeMsg >> forever (do
+repl evaluator = putStrLn welcomeMsg >> forever (do
     putStr ">>> " >> hFlush stdout
-    out <- getLine >>= evaluator
+    out <- isEOF >>= (\eof -> if eof then return "(exit)"
+                                     else getLine) >>= evaluator
     if null out
         then return ()
         else putStrLn out)
+    where
+        welcomeMsg = versionHeader ++
+            "\n\nA really tiny Scheme interpreter." ++
+            "\n\nType (def-list) to inspect the environment."
 
-main = do
+run = do
     (options, files) <- processCmdLine
+
     let Options {
         optVerbose = optVerbose,
         optShowHelp = optShowHelp,
         optRepl = optRepl,
         optStdLib = optStdLib
     } = options
-    when optShowHelp (usageMsg >>= putStr >> exitWith ExitSuccess)
+
+    when optShowHelp $ usageMsg >>= putStr >> exitSuccess
+
     interpreter <- getMyLispInterpreter "stdin"
-    let startupCmds = concat ["(load \"" ++ m ++ "\")" | m <- optStdLib:files]
-    let onAbort e = putStrLn $ "\nAborted: " ++ (show (e :: SomeException))
-    handle onAbort (do
-        interpreter startupCmds >>= (\out -> if not optVerbose || null out
-                                                then return ()
-                                                else putStrLn out)
-        when (null files || optRepl) (repl interpreter))
+
+    let onAbort e = putStrLn ("\nAborted: " ++ show (e :: AsyncException)) >>
+                        exitFailure
+    let startupCmds = concat ["(load \"" ++ m ++ "\")" |
+                        m <- optStdLib:files, (not . null) m]
+    let batchInterpreter = handle (\e -> putStrLn (show (e :: ErrorCall)) >>
+                                        exitFailure)
+                                    (interpreter startupCmds) >>=
+                            (\out -> if not optVerbose || null out
+                                        then return ()
+                                        else putStrLn out)
+    let replInterpreter = repl $ (\input -> handle
+                                    (\e -> return $ show (e :: ErrorCall))
+                                    (interpreter input))
+
+    handle onAbort $
+        batchInterpreter >> when (null files || optRepl) replInterpreter
+
+main =
+    run
+    `catches`
+    [Handler (\(e :: ExitCode) -> throw e),
+     Handler (\(e :: SomeException) ->
+        putStrLn ("=O THE UNTHINKABLE HAPPENED =O!! Fill a bug report. " ++
+            "Error details: " ++ show (e :: SomeException)) >>
+        exitFailure)]
